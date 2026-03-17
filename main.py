@@ -325,8 +325,8 @@ def diff_contacts(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> Tuple
 
 def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
     if old_df is None or old_df.empty:
-        output = new_df.copy()
-        return output[["Contact1", "Contact2", "Phone", "Groups"]]
+        output = output.rename(columns={"Phone": "PhoneNumber"})
+        return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
 
     old_lookup = old_df.set_index("Phone", drop=False)
     new_lookup = new_df.set_index("Phone", drop=False)
@@ -357,8 +357,8 @@ def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -
             )
 
     output = pd.DataFrame(final_rows)
-    output = output.drop_duplicates(subset=["Phone"], keep="first")
-    return output[["Contact1", "Contact2", "Phone", "Groups"]]
+    output = output.rename(columns={"Phone": "PhoneNumber"})
+    return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
 
 def build_summary(
     cleaned_df: pd.DataFrame,
