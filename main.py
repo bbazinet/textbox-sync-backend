@@ -323,6 +323,42 @@ def diff_contacts(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> Tuple
     unchanged = pd.DataFrame(unchanged_rows)
     return adds, updates, unchanged, removals
 
+def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if old_df is None or old_df.empty:
+        output = new_df.copy()
+        return output[["Contact1", "Contact2", "Phone", "Groups"]]
+
+    old_lookup = old_df.set_index("Phone", drop=False)
+    new_lookup = new_df.set_index("Phone", drop=False)
+
+    final_rows = []
+
+    # Current residents from the new PMS file
+    for phone, row in new_lookup.iterrows():
+        final_rows.append(
+            {
+                "Contact1": row.get("Contact1", ""),
+                "Contact2": row.get("Contact2", ""),
+                "Phone": phone,
+                "Groups": row.get("Groups", ""),
+            }
+        )
+
+    # Past residents from the old TextBox file
+    for phone, row in old_lookup.iterrows():
+        if phone not in new_lookup.index:
+            final_rows.append(
+                {
+                    "Contact1": row.get("Contact1", ""),
+                    "Contact2": "",
+                    "Phone": phone,
+                    "Groups": "",
+                }
+            )
+
+    output = pd.DataFrame(final_rows)
+    output = output.drop_duplicates(subset=["Phone"], keep="first")
+    return output[["Contact1", "Contact2", "Phone", "Groups"]]
 
 def build_summary(
     cleaned_df: pd.DataFrame,
@@ -385,11 +421,23 @@ async def sync_preview(
 
     cleaned_df, invalid_rows = normalize_pms_export(raw_df, PROPERTY_CONFIGS[property_key])
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
+
+    full_sync_df = build_full_sync_file(cleaned_df, old_df)
     adds, updates, unchanged, removals = diff_contacts(cleaned_df, old_df)
 
     summary = build_summary(cleaned_df, invalid_rows, adds, updates, unchanged, removals)
     job_id = uuid.uuid4().hex
-    write_artifacts(job_id, cleaned_df, removals, summary)
+
+    job_dir = ARTIFACT_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    import_path = job_dir / "textbox_full_sync.xlsx"
+    summary_path = job_dir / "sync_summary.xlsx"
+
+    full_sync_df.to_excel(import_path, index=False)
+
+    with pd.ExcelWriter(summary_path, engine="openpyxl") as writer:
+        pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
 
     payload = {
         "job_id": job_id,
@@ -399,8 +447,7 @@ async def sync_preview(
         "updates_preview": updates.head(25).fillna("").to_dict(orient="records"),
         "removals_preview": removals[[c for c in ["Contact1", "Contact2", "Phone", "Groups"] if c in removals.columns]].head(25).fillna("").to_dict(orient="records"),
         "downloads": {
-            "import": f"/sync/download/{job_id}/textbox_import.xlsx",
-            "removals": f"/sync/download/{job_id}/contacts_to_remove.xlsx",
+            "import": f"/sync/download/{job_id}/textbox_full_sync.xlsx",
             "summary": f"/sync/download/{job_id}/sync_summary.xlsx",
         },
     }
