@@ -624,7 +624,7 @@ async def sync_preview(
     inferred_config = PROPERTY_CONFIGS[property_key].copy()
 
     if current_df is not None:
-    inferred_config.update(infer_apartment_format_from_textbox(current_df))
+        inferred_config.update(infer_apartment_format_from_textbox(current_df))
 
     cleaned_df, invalid_rows = normalize_pms_export(raw_df, inferred_config)
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
