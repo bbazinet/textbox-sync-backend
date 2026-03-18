@@ -623,6 +623,7 @@ async def sync_preview(
     pms_file: UploadFile = File(...),
     current_contacts_file: Optional[UploadFile] = File(None),
 ):
+    
     if property_key not in PROPERTY_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown property config: {property_key}")
 
