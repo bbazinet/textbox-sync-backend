@@ -497,6 +497,53 @@ async def sync_preview(
     return JSONResponse(payload)
 
 
+@app.post("/sync/general-preview", response_model=PreviewResponse)
+async def general_sync_preview(
+    property_key: str = Form("default_letter"),
+    pms_file: UploadFile = File(...),
+    current_contacts_file: Optional[UploadFile] = File(None),
+):
+    if property_key not in PROPERTY_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unknown property config: {property_key}")
+
+    raw_df = load_table_from_upload(pms_file)
+    current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
+
+    cleaned_df, invalid_rows = normalize_pms_export(raw_df, PROPERTY_CONFIGS[property_key])
+    old_df = normalize_current_contacts(current_df) if current_df is not None else None
+
+    full_sync_df = build_general_full_sync_file(cleaned_df, old_df)
+    adds, updates, unchanged, removals = diff_contacts(cleaned_df, old_df)
+
+    summary = build_summary(cleaned_df, invalid_rows, adds, updates, unchanged, removals)
+    job_id = uuid.uuid4().hex
+
+    job_dir = ARTIFACT_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    import_path = job_dir / "textbox_general_full_sync.xlsx"
+    summary_path = job_dir / "sync_summary.xlsx"
+
+    full_sync_df.to_excel(import_path, index=False)
+
+    with pd.ExcelWriter(summary_path, engine="openpyxl") as writer:
+        pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
+
+    payload = {
+        "job_id": job_id,
+        "totals": summary,
+        "invalid_rows": invalid_rows[:100],
+        "adds_preview": adds[[c for c in ["Contact1", "Contact2", "Phone", "Groups"] if c in adds.columns]].head(25).fillna("").to_dict(orient="records"),
+        "updates_preview": updates.head(25).fillna("").to_dict(orient="records"),
+        "removals_preview": removals[[c for c in ["Contact1", "Contact2", "Phone", "Groups"] if c in removals.columns]].head(25).fillna("").to_dict(orient="records"),
+        "downloads": {
+            "import": f"/sync/download/{job_id}/textbox_general_full_sync.xlsx",
+            "summary": f"/sync/download/{job_id}/sync_summary.xlsx",
+        },
+    }
+    return JSONResponse(payload)
+
+
 @app.get("/sync/download/{job_id}/{filename}")
 def download_artifact(job_id: str, filename: str):
     path = ARTIFACT_DIR / job_id / filename
