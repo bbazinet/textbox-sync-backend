@@ -112,6 +112,8 @@ def extract_building(unit_value: str, strategy: str) -> str:
 
     if strategy == "first_char":
         return unit_value[:1]
+    if strategy == "first_two" and len(unit_value) >= 2:
+        return unit_value[:2]
     if strategy == "before_dash":
         return unit_value.split("-")[0]
 
