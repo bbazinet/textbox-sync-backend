@@ -362,6 +362,79 @@ def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -
     output = output.rename(columns={"Phone": "PhoneNumber"})
     return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
 
+def build_delta_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if old_df is None or old_df.empty:
+        output = new_df.copy()
+        output = output.rename(columns={"Phone": "PhoneNumber"})
+        return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
+
+    old_lookup = old_df.set_index("Phone", drop=False)
+    new_lookup = new_df.set_index("Phone", drop=False)
+
+    final_rows = []
+
+    # Adds + updates
+    for phone, row in new_lookup.iterrows():
+        if phone not in old_lookup.index:
+            final_rows.append(
+                {
+                    "Contact1": row.get("Contact1", ""),
+                    "Contact2": row.get("Contact2", ""),
+                    "Phone": phone,
+                    "Groups": row.get("Groups", ""),
+                }
+            )
+            continue
+
+        old_row = old_lookup.loc[phone]
+
+        old_contact1 = str(old_row.get("Contact1", "")).strip()
+        old_contact2 = str(old_row.get("Contact2", "")).strip()
+        old_groups = str(old_row.get("Groups", "")).strip()
+
+        new_contact1 = str(row.get("Contact1", "")).strip()
+        new_contact2 = str(row.get("Contact2", "")).strip()
+        new_groups = str(row.get("Groups", "")).strip()
+
+        if (
+            old_contact1 != new_contact1
+            or old_contact2 != new_contact2
+            or old_groups != new_groups
+        ):
+            final_rows.append(
+                {
+                    "Contact1": new_contact1,
+                    "Contact2": new_contact2,
+                    "Phone": phone,
+                    "Groups": new_groups,
+                }
+            )
+
+    # Deactivations: only if something actually needs to be cleared
+    for phone, row in old_lookup.iterrows():
+        if phone not in new_lookup.index:
+            old_contact2 = str(row.get("Contact2", "")).strip()
+            old_groups = str(row.get("Groups", "")).strip()
+
+            if old_contact2 or old_groups:
+                final_rows.append(
+                    {
+                        "Contact1": str(row.get("Contact1", "")).strip(),
+                        "Contact2": "",
+                        "Phone": phone,
+                        "Groups": "",
+                    }
+                )
+
+    output = pd.DataFrame(final_rows)
+
+    if output.empty:
+        output = pd.DataFrame(columns=["Contact1", "Contact2", "PhoneNumber", "Groups"])
+        return output
+
+    output = output.drop_duplicates(subset=["Phone"], keep="first")
+    output = output.rename(columns={"Phone": "PhoneNumber"})
+    return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
 
 def build_general_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
     if old_df is None or old_df.empty:
@@ -465,7 +538,7 @@ async def sync_preview(
     cleaned_df, invalid_rows = normalize_pms_export(raw_df, PROPERTY_CONFIGS[property_key])
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
 
-    full_sync_df = build_full_sync_file(cleaned_df, old_df)
+    delta_sync_df = build_delta_sync_file(cleaned_df, old_df)
     adds, updates, unchanged, removals = diff_contacts(cleaned_df, old_df)
 
     summary = build_summary(cleaned_df, invalid_rows, adds, updates, unchanged, removals)
@@ -474,10 +547,10 @@ async def sync_preview(
     job_dir = ARTIFACT_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    import_path = job_dir / "textbox_full_sync.xlsx"
+    import_path = job_dir / "textbox_delta_sync.xlsx"
     summary_path = job_dir / "sync_summary.xlsx"
 
-    full_sync_df.to_excel(import_path, index=False)
+    delta_sync_df.to_excel(import_path, index=False)
 
     with pd.ExcelWriter(summary_path, engine="openpyxl") as writer:
         pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
@@ -490,7 +563,7 @@ async def sync_preview(
         "updates_preview": updates.head(25).fillna("").to_dict(orient="records"),
         "removals_preview": removals[[c for c in ["Contact1", "Contact2", "Phone", "Groups"] if c in removals.columns]].head(25).fillna("").to_dict(orient="records"),
         "downloads": {
-            "import": f"/sync/download/{job_id}/textbox_full_sync.xlsx",
+            "import": f"/sync/download/{job_id}/textbox_delta_sync.xlsx",
             "summary": f"/sync/download/{job_id}/sync_summary.xlsx",
         },
     }
