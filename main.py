@@ -196,9 +196,15 @@ def normalize_pms_export(raw_df: pd.DataFrame, property_config: dict) -> Tuple[p
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
 
+    working = cleaned[["Name", "Bldg/Unit", "Phone"]].copy()
+    working["source_row"] = range(1, len(working) + 1)
+    working["Contact1"] = working["Name"].apply(title_case_name)
+    working["Phone"] = working["Phone"].apply(clean_phone)
+
     working["Unit"] = working["Bldg/Unit"].fillna("").astype(str).str.strip()
     working["Building"] = working["Unit"].apply(lambda x: extract_building(x, property_config["building_strategy"]))
     working["Floor"] = working["Unit"].apply(lambda x: extract_floor(x, property_config.get("floor_strategy", "none")))
+
     working["Contact2"] = working.apply(
         lambda row: property_config["contact2_template"].format(
             unit=row["Unit"],
