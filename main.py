@@ -118,6 +118,17 @@ def extract_building(unit_value: str, strategy: str) -> str:
     return unit_value[:1]
 
 
+def extract_floor(unit_value: str, strategy: str) -> str:
+    unit_value = (unit_value or "").strip()
+    if not unit_value:
+        return ""
+
+    if strategy == "third_char" and len(unit_value) >= 3:
+        return unit_value[2]
+
+    return ""
+
+
 def split_name_parts(name: str) -> Tuple[str, str, str]:
     value = name.strip()
     if not value:
@@ -185,18 +196,23 @@ def normalize_pms_export(raw_df: pd.DataFrame, property_config: dict) -> Tuple[p
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
 
-    working = cleaned[["Name", "Bldg/Unit", "Phone"]].copy()
-    working["source_row"] = range(1, len(working) + 1)
-    working["Contact1"] = working["Name"].apply(title_case_name)
-    working["Phone"] = working["Phone"].apply(clean_phone)
     working["Unit"] = working["Bldg/Unit"].fillna("").astype(str).str.strip()
     working["Building"] = working["Unit"].apply(lambda x: extract_building(x, property_config["building_strategy"]))
+    working["Floor"] = working["Unit"].apply(lambda x: extract_floor(x, property_config.get("floor_strategy", "none")))
     working["Contact2"] = working.apply(
-        lambda row: property_config["contact2_template"].format(unit=row["Unit"], building=row["Building"]),
+        lambda row: property_config["contact2_template"].format(
+            unit=row["Unit"],
+            building=row["Building"],
+            floor=row["Floor"],
+        ),
         axis=1,
     )
     working["Groups"] = working.apply(
-        lambda row: property_config["groups_template"].format(unit=row["Unit"], building=row["Building"]),
+        lambda row: property_config["groups_template"].format(
+            unit=row["Unit"],
+            building=row["Building"],
+            floor=row["Floor"],
+        ),
         axis=1,
     )
 
@@ -270,6 +286,76 @@ def normalize_current_contacts(current_df: pd.DataFrame) -> pd.DataFrame:
     normalized = normalized.drop_duplicates(subset=["Phone"], keep="first")
     return normalized
 
+def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
+    normalized = normalize_current_contacts(current_df)
+
+    sample = normalized[
+        (normalized["Contact2"].fillna("").astype(str).str.strip() != "")
+        & (normalized["Groups"].fillna("").astype(str).str.strip() != "")
+    ].copy()
+
+    if sample.empty:
+        return {
+            "contact2_template": "apt {unit}",
+            "groups_template": "#all#bldg{building}",
+            "building_strategy": "first_char",
+            "floor_strategy": "none",
+        }
+
+    sample["Contact2"] = sample["Contact2"].astype(str).str.strip()
+    sample["Groups"] = sample["Groups"].astype(str).str.strip()
+
+    # Detect if Contact2 usually looks like "apt XXXXX"
+    apt_prefixed = sample["Contact2"].str.lower().str.startswith("apt ").mean() >= 0.7
+
+    # Try to extract unit from Contact2
+    if apt_prefixed:
+        units = sample["Contact2"].str[4:].str.strip()
+        contact2_template = "apt {unit}"
+    else:
+        units = sample["Contact2"].str.strip()
+        contact2_template = "{unit}"
+
+    # Detect building/floor style from groups and unit
+    floor_pattern_ratio = sample["Groups"].str.contains(r"#bldg\d{2}floor\d", case=False, regex=True).mean()
+    two_digit_bldg_ratio = sample["Groups"].str.contains(r"#bldg\d{2}", case=False, regex=True).mean()
+
+    # Default assumptions
+    building_strategy = "first_char"
+    floor_strategy = "none"
+    groups_template = "#all#bldg{building}"
+
+    # Compact numeric unit pattern like 01101, 08206, 14303
+    compact_numeric_ratio = units.str.match(r"^\d{5}$", na=False).mean()
+
+    if compact_numeric_ratio >= 0.7 and two_digit_bldg_ratio >= 0.7:
+        building_strategy = "first_two"
+        groups_template = "#all#bldg{building}"
+
+        if floor_pattern_ratio >= 0.5:
+            floor_strategy = "third_char"
+            groups_template = "#all#bldg{building}#bldg{building}floor{floor}"
+
+    # Dashed apartment pattern like 207-101
+    dashed_ratio = units.str.contains(r"^\d+-\d+$", regex=True, na=False).mean()
+    if dashed_ratio >= 0.7:
+        building_strategy = "before_dash"
+        floor_strategy = "none"
+        groups_template = "#all#bldg{building}"
+
+    # Letter building pattern like A206
+    letter_ratio = units.str.contains(r"^[A-Za-z]\d+", regex=True, na=False).mean()
+    if letter_ratio >= 0.7:
+        building_strategy = "first_char"
+        floor_strategy = "none"
+        groups_template = "#all#bldg{building}"
+
+    return {
+        "contact2_template": contact2_template,
+        "groups_template": groups_template,
+        "building_strategy": building_strategy,
+        "floor_strategy": floor_strategy,
+    }
 
 def diff_contacts(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if old_df is None or old_df.empty:
@@ -535,7 +621,12 @@ async def sync_preview(
     raw_df = load_table_from_upload(pms_file)
     current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
 
-    cleaned_df, invalid_rows = normalize_pms_export(raw_df, PROPERTY_CONFIGS[property_key])
+    inferred_config = PROPERTY_CONFIGS[property_key].copy()
+
+    if current_df is not None:
+    inferred_config.update(infer_apartment_format_from_textbox(current_df))
+
+    cleaned_df, invalid_rows = normalize_pms_export(raw_df, inferred_config)
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
 
     delta_sync_df = build_delta_sync_file(cleaned_df, old_df)
