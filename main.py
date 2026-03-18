@@ -323,11 +323,12 @@ def diff_contacts(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> Tuple
     unchanged = pd.DataFrame(unchanged_rows)
     return adds, updates, unchanged, removals
 
+
 def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
     if old_df is None or old_df.empty:
-    output = new_df.copy()
-    output = output.rename(columns={"Phone": "PhoneNumber"})
-    return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
+        output = new_df.copy()
+        output = output.rename(columns={"Phone": "PhoneNumber"})
+        return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
 
     old_lookup = old_df.set_index("Phone", drop=False)
     new_lookup = new_df.set_index("Phone", drop=False)
@@ -360,6 +361,47 @@ def build_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -
     output = pd.DataFrame(final_rows)
     output = output.rename(columns={"Phone": "PhoneNumber"})
     return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
+
+
+def build_general_full_sync_file(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if old_df is None or old_df.empty:
+        output = new_df.copy()
+        output = output.rename(columns={"Phone": "PhoneNumber"})
+        return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
+
+    old_lookup = old_df.set_index("Phone", drop=False)
+    new_lookup = new_df.set_index("Phone", drop=False)
+
+    final_rows = []
+
+    # New + updated contacts
+    for phone, row in new_lookup.iterrows():
+        final_rows.append(
+            {
+                "Contact1": row.get("Contact1", ""),
+                "Contact2": row.get("Contact2", ""),
+                "Phone": phone,
+                "Groups": row.get("Groups", ""),
+            }
+        )
+
+    # Existing contacts NOT in new file → KEEP AS-IS
+    for phone, row in old_lookup.iterrows():
+        if phone not in new_lookup.index:
+            final_rows.append(
+                {
+                    "Contact1": row.get("Contact1", ""),
+                    "Contact2": row.get("Contact2", ""),
+                    "Phone": phone,
+                    "Groups": row.get("Groups", ""),
+                }
+            )
+
+    output = pd.DataFrame(final_rows)
+    output = output.drop_duplicates(subset=["Phone"], keep="first")
+    output = output.rename(columns={"Phone": "PhoneNumber"})
+    return output[["Contact1", "Contact2", "PhoneNumber", "Groups"]]
+
 
 def build_summary(
     cleaned_df: pd.DataFrame,
