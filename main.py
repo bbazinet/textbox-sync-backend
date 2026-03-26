@@ -351,6 +351,61 @@ def extract_unit_from_contact2(contact2: str) -> str:
 
     return value
 
+def build_unit_mapping_from_textbox(current_df: pd.DataFrame) -> Dict[str, dict]:
+    normalized = normalize_current_contacts(current_df)
+
+    mapping: Dict[str, List[dict]] = {}
+
+    for _, row in normalized.iterrows():
+        contact2 = str(row.get("Contact2", "")).strip()
+        groups = str(row.get("Groups", "")).strip()
+
+        if not contact2 or not groups:
+            continue
+
+        unit = extract_unit_from_contact2(contact2)
+        if not unit:
+            continue
+
+        candidate_keys = {unit}
+
+        if "-" in unit:
+            candidate_keys.add(unit.split("-", 1)[0].strip())
+
+        for key in candidate_keys:
+            if not key:
+                continue
+
+            if key not in mapping:
+                mapping[key] = []
+
+            mapping[key].append(
+                {
+                    "groups": groups,
+                    "contact2": contact2,
+                }
+            )
+
+    resolved: Dict[str, dict] = {}
+
+    for key, entries in mapping.items():
+        group_counts: Dict[str, int] = {}
+        contact2_counts: Dict[str, int] = {}
+
+        for entry in entries:
+            group_counts[entry["groups"]] = group_counts.get(entry["groups"], 0) + 1
+            contact2_counts[entry["contact2"]] = contact2_counts.get(entry["contact2"], 0) + 1
+
+        best_groups = max(group_counts, key=group_counts.get)
+        best_contact2 = max(contact2_counts, key=contact2_counts.get)
+
+        resolved[key] = {
+            "groups": best_groups,
+            "contact2": best_contact2,
+        }
+
+    return resolved
+
 def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
     normalized = normalize_current_contacts(current_df)
 
