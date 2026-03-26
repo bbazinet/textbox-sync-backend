@@ -294,6 +294,17 @@ def normalize_current_contacts(current_df: pd.DataFrame) -> pd.DataFrame:
     normalized = normalized.drop_duplicates(subset=["Phone"], keep="first")
     return normalized
 
+def extract_unit_from_contact2(contact2: str) -> str:
+    value = "" if pd.isna(contact2) else str(contact2).strip()
+    if not value:
+        return ""
+
+    lower = value.lower()
+    if lower.startswith("apt "):
+        return value[4:].strip()
+
+    return value
+
 def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
     normalized = normalize_current_contacts(current_df)
 
