@@ -257,7 +257,7 @@ def normalize_pms_export(
     working["Building"] = working["Unit"].apply(lambda x: extract_building(x, property_config["building_strategy"]))
     working["Floor"] = working["Unit"].apply(lambda x: extract_floor(x, property_config.get("floor_strategy", "none")))
 
-            unit_mapping = unit_mapping or {}
+    unit_mapping = unit_mapping or {}
 
     def resolve_mapped_entry(unit_value: str) -> Optional[dict]:
         keys = get_candidate_mapping_keys(unit_value)
