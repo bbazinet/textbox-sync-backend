@@ -369,58 +369,79 @@ def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
 
     sample["Contact2"] = sample["Contact2"].astype(str).str.strip()
     sample["Groups"] = sample["Groups"].astype(str).str.strip()
+    sample["UnitValue"] = sample["Contact2"].apply(extract_unit_from_contact2)
 
-    # Detect if Contact2 usually looks like "apt XXXXX"
     apt_prefixed = sample["Contact2"].str.lower().str.startswith("apt ").mean() >= 0.7
+    contact2_template = "apt {unit}" if apt_prefixed else "{unit}"
 
-     # Try to extract unit from Contact2
-    units = sample["Contact2"].apply(extract_unit_from_contact2)
-
-    if apt_prefixed:
-        contact2_template = "apt {unit}"
-    else:
-        contact2_template = "{unit}"
-
-    # Detect building/floor style from groups and unit
-    floor_pattern_ratio = sample["Groups"].str.contains(r"#bldg\d{2}floor\d", case=False, regex=True).mean()
-    two_digit_bldg_ratio = sample["Groups"].str.contains(r"#bldg\d{2}", case=False, regex=True).mean()
-
-    # Default assumptions
-    building_strategy = "first_char"
-    floor_strategy = "none"
-    groups_template = "#all#bldg{building}"
-
-    # Compact numeric unit pattern like 01101, 08206, 14303
-    compact_numeric_ratio = units.str.match(r"^\d{5}$", na=False).mean()
-
-    if compact_numeric_ratio >= 0.7 and two_digit_bldg_ratio >= 0.7:
-        building_strategy = "first_two"
-        groups_template = "#all#bldg{building}"
-
-        if floor_pattern_ratio >= 0.5:
-            floor_strategy = "third_char"
-            groups_template = "#all#bldg{building}#bldg{building}floor{floor}"
-
-    # Dashed apartment pattern like 207-101
-    dashed_ratio = units.str.contains(r"^\d+-\d+$", regex=True, na=False).mean()
-    if dashed_ratio >= 0.7:
-        building_strategy = "before_dash"
-        floor_strategy = "none"
-        groups_template = "#all#bldg{building}"
-
-    # Letter building pattern like A206
-    letter_ratio = units.str.contains(r"^[A-Za-z]\d+", regex=True, na=False).mean()
-    if letter_ratio >= 0.7:
-        building_strategy = "first_char"
-        floor_strategy = "none"
-        groups_template = "#all#bldg{building}"
-
-    return {
+    best_score = -1
+    best_config = {
         "contact2_template": contact2_template,
-        "groups_template": groups_template,
-        "building_strategy": building_strategy,
-        "floor_strategy": floor_strategy,
+        "groups_template": "#all#bldg{building}",
+        "building_strategy": "first_char",
+        "floor_strategy": "none",
     }
+
+    building_candidates = ["first_char", "first_two", "before_dash"]
+    floor_candidates = ["none", "second_char", "third_char", "after_dash_first_char"]
+
+    for building_strategy in building_candidates:
+        for floor_strategy in floor_candidates:
+            score = 0
+            matched_rows = 0
+            floor_rows = 0
+
+            for _, row in sample.iterrows():
+                unit_value = row["UnitValue"]
+                groups_value = row["Groups"]
+
+                building_map = candidate_building_values(unit_value)
+                floor_map = candidate_floor_values(unit_value)
+
+                building = building_map.get(building_strategy, "")
+                floor = floor_map.get(floor_strategy, "")
+
+                if not building:
+                    continue
+
+                expected_building_tag = f"#bldg{building}"
+                has_building = expected_building_tag in groups_value
+
+                if not has_building:
+                    continue
+
+                matched_rows += 1
+                score += 2
+
+                expected_floor_tag = f"#bldg{building}floor{floor}" if floor else ""
+
+                actual_has_floor = "#floor" in groups_value.lower() or "floor" in groups_value.lower()
+
+                if floor_strategy == "none":
+                    if not actual_has_floor:
+                        score += 1
+                else:
+                    if expected_floor_tag and expected_floor_tag in groups_value:
+                        score += 2
+                        floor_rows += 1
+
+            if matched_rows == 0:
+                continue
+
+            groups_template = "#all#bldg{building}"
+            if floor_strategy != "none" and floor_rows > 0:
+                groups_template = "#all#bldg{building}#bldg{building}floor{floor}"
+
+            if score > best_score:
+                best_score = score
+                best_config = {
+                    "contact2_template": contact2_template,
+                    "groups_template": groups_template,
+                    "building_strategy": building_strategy,
+                    "floor_strategy": floor_strategy if floor_rows > 0 else "none",
+                }
+
+    return best_config
 
 def diff_contacts(new_df: pd.DataFrame, old_df: Optional[pd.DataFrame]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if old_df is None or old_df.empty:
