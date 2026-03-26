@@ -236,7 +236,11 @@ def merge_household_names(names: List[str]) -> str:
     return " & ".join(ordered_unique)
 
 
-def normalize_pms_export(raw_df: pd.DataFrame, property_config: dict) -> Tuple[pd.DataFrame, List[dict]]:
+def normalize_pms_export(
+    raw_df: pd.DataFrame,
+    property_config: dict,
+    unit_mapping: Optional[Dict[str, dict]] = None,
+) -> Tuple[pd.DataFrame, List[dict]]:
     cleaned = detect_and_clean_onesite(raw_df)
 
     required_columns = ["Name", "Bldg/Unit", "Phone"]
@@ -253,22 +257,40 @@ def normalize_pms_export(raw_df: pd.DataFrame, property_config: dict) -> Tuple[p
     working["Building"] = working["Unit"].apply(lambda x: extract_building(x, property_config["building_strategy"]))
     working["Floor"] = working["Unit"].apply(lambda x: extract_floor(x, property_config.get("floor_strategy", "none")))
 
-    working["Contact2"] = working.apply(
-        lambda row: property_config["contact2_template"].format(
+        unit_mapping = unit_mapping or {}
+
+    def resolve_contact2(row) -> str:
+        for key in get_candidate_mapping_keys(row["Unit"]):
+            if key in unit_mapping:
+                mapped_contact2 = unit_mapping[key].get("contact2", "")
+                if mapped_contact2:
+                    if mapped_contact2.lower().startswith("apt "):
+                        return f"apt {row['Unit']}"
+                    if mapped_contact2.lower().startswith("th "):
+                        return f"TH {row['Unit']}"
+                    return mapped_contact2
+
+        return property_config["contact2_template"].format(
             unit=row["Unit"],
             building=row["Building"],
             floor=row["Floor"],
-        ),
-        axis=1,
-    )
-    working["Groups"] = working.apply(
-        lambda row: property_config["groups_template"].format(
+        )
+
+    def resolve_groups(row) -> str:
+        for key in get_candidate_mapping_keys(row["Unit"]):
+            if key in unit_mapping:
+                mapped_groups = unit_mapping[key].get("groups", "")
+                if mapped_groups:
+                    return mapped_groups
+
+        return property_config["groups_template"].format(
             unit=row["Unit"],
             building=row["Building"],
             floor=row["Floor"],
-        ),
-        axis=1,
-    )
+        )
+
+    working["Contact2"] = working.apply(resolve_contact2, axis=1)
+    working["Groups"] = working.apply(resolve_groups, axis=1)
 
     invalid_mask = (
         (working["Phone"] == "")
