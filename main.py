@@ -406,6 +406,20 @@ def build_unit_mapping_from_textbox(current_df: pd.DataFrame) -> Dict[str, dict]
 
     return resolved
 
+def get_candidate_mapping_keys(unit_value: str) -> List[str]:
+    unit_value = (unit_value or "").strip()
+    if not unit_value:
+        return []
+
+    keys = [unit_value]
+
+    if "-" in unit_value:
+        prefix = unit_value.split("-", 1)[0].strip()
+        if prefix and prefix not in keys:
+            keys.append(prefix)
+
+    return keys
+
 def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
     normalized = normalize_current_contacts(current_df)
 
