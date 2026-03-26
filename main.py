@@ -128,7 +128,53 @@ def extract_floor(unit_value: str, strategy: str) -> str:
     if strategy == "third_char" and len(unit_value) >= 3:
         return unit_value[2]
 
+    if strategy == "second_char" and len(unit_value) >= 2:
+        return unit_value[1]
+
+    if strategy == "after_dash_first_char" and "-" in unit_value:
+        after_dash = unit_value.split("-", 1)[1].strip()
+        if after_dash:
+            return after_dash[:1]
+
     return ""
+
+def candidate_building_values(unit_value: str) -> Dict[str, str]:
+    unit_value = (unit_value or "").strip()
+    values: Dict[str, str] = {}
+
+    if not unit_value:
+        return values
+
+    values["first_char"] = unit_value[:1]
+
+    if len(unit_value) >= 2:
+        values["first_two"] = unit_value[:2]
+
+    if "-" in unit_value:
+        values["before_dash"] = unit_value.split("-", 1)[0].strip()
+
+    return values
+
+
+def candidate_floor_values(unit_value: str) -> Dict[str, str]:
+    unit_value = (unit_value or "").strip()
+    values: Dict[str, str] = {"none": ""}
+
+    if not unit_value:
+        return values
+
+    if len(unit_value) >= 2 and unit_value[1].isdigit():
+        values["second_char"] = unit_value[1]
+
+    if len(unit_value) >= 3 and unit_value[2].isdigit():
+        values["third_char"] = unit_value[2]
+
+    if "-" in unit_value:
+        after_dash = unit_value.split("-", 1)[1].strip()
+        if after_dash:
+            values["after_dash_first_char"] = after_dash[:1]
+
+    return values
 
 
 def split_name_parts(name: str) -> Tuple[str, str, str]:
