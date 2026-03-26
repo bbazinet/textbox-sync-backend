@@ -327,12 +327,12 @@ def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
     # Detect if Contact2 usually looks like "apt XXXXX"
     apt_prefixed = sample["Contact2"].str.lower().str.startswith("apt ").mean() >= 0.7
 
-    # Try to extract unit from Contact2
+     # Try to extract unit from Contact2
+    units = sample["Contact2"].apply(extract_unit_from_contact2)
+
     if apt_prefixed:
-        units = sample["Contact2"].str[4:].str.strip()
         contact2_template = "apt {unit}"
     else:
-        units = sample["Contact2"].str.strip()
         contact2_template = "{unit}"
 
     # Detect building/floor style from groups and unit
