@@ -814,11 +814,11 @@ async def sync_preview(
     pms_file: UploadFile = File(...),
     current_contacts_file: Optional[UploadFile] = File(None),
 ):
-    
     if property_key not in PROPERTY_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown property config: {property_key}")
 
-        raw_df = load_table_from_upload(pms_file)
+    # ✅ FIXED INDENTATION
+    raw_df = load_table_from_upload(pms_file)
     current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
 
     inferred_config = PROPERTY_CONFIGS[property_key].copy()
@@ -833,6 +833,7 @@ async def sync_preview(
         inferred_config,
         unit_mapping=unit_mapping,
     )
+
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
 
     delta_sync_df = build_delta_sync_file(cleaned_df, old_df)
@@ -864,6 +865,7 @@ async def sync_preview(
             "summary": f"/sync/download/{job_id}/sync_summary.xlsx",
         },
     }
+
     return JSONResponse(payload)
 
 
