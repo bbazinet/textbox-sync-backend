@@ -259,16 +259,33 @@ def normalize_pms_export(
 
         unit_mapping = unit_mapping or {}
 
-    def resolve_contact2(row) -> str:
-        for key in get_candidate_mapping_keys(row["Unit"]):
+        def resolve_mapped_entry(unit_value: str) -> Optional[dict]:
+        keys = get_candidate_mapping_keys(unit_value)
+
+        # 1. Exact unit match first
+        if keys:
+            exact_key = keys[0]
+            if exact_key in unit_mapping:
+                return unit_mapping[exact_key]
+
+        # 2. Prefix match second
+        for key in keys[1:]:
             if key in unit_mapping:
-                mapped_contact2 = unit_mapping[key].get("contact2", "")
-                if mapped_contact2:
-                    if mapped_contact2.lower().startswith("apt "):
-                        return f"apt {row['Unit']}"
-                    if mapped_contact2.lower().startswith("th "):
-                        return f"TH {row['Unit']}"
-                    return mapped_contact2
+                return unit_mapping[key]
+
+        return None
+
+    def resolve_contact2(row) -> str:
+        mapped_entry = resolve_mapped_entry(row["Unit"])
+
+        if mapped_entry:
+            mapped_contact2 = str(mapped_entry.get("contact2", "")).strip()
+            if mapped_contact2:
+                if mapped_contact2.lower().startswith("apt "):
+                    return f"apt {row['Unit']}"
+                if mapped_contact2.lower().startswith("th "):
+                    return f"TH {row['Unit']}"
+                return mapped_contact2
 
         return property_config["contact2_template"].format(
             unit=row["Unit"],
@@ -277,11 +294,12 @@ def normalize_pms_export(
         )
 
     def resolve_groups(row) -> str:
-        for key in get_candidate_mapping_keys(row["Unit"]):
-            if key in unit_mapping:
-                mapped_groups = unit_mapping[key].get("groups", "")
-                if mapped_groups:
-                    return mapped_groups
+        mapped_entry = resolve_mapped_entry(row["Unit"])
+
+        if mapped_entry:
+            mapped_groups = str(mapped_entry.get("groups", "")).strip()
+            if mapped_groups:
+                return mapped_groups
 
         return property_config["groups_template"].format(
             unit=row["Unit"],
