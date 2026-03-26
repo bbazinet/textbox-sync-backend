@@ -386,8 +386,12 @@ def extract_unit_from_contact2(contact2: str) -> str:
         return ""
 
     lower = value.lower()
+
     if lower.startswith("apt "):
         return value[4:].strip()
+
+    if lower.startswith("th "):
+        return value[3:].strip()
 
     return value
 
