@@ -433,8 +433,12 @@ def get_candidate_mapping_keys(unit_value: str) -> List[str]:
     if not unit_value:
         return []
 
-    keys = [unit_value]
+    keys: List[str] = []
 
+    # 1. Exact unit always first
+    keys.append(unit_value)
+
+    # 2. Prefix before dash second
     if "-" in unit_value:
         prefix = unit_value.split("-", 1)[0].strip()
         if prefix and prefix not in keys:
