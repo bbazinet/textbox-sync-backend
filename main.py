@@ -330,13 +330,13 @@ def normalize_pms_export(
             reason.append("Blank Groups")
 
         invalid_rows.append(
-    {
-        "row": int(row["source_row"]),
-        "name": "" if pd.isna(row["Name"]) else str(row["Name"]),
-        "phone": re.sub(r"\D", "", "" if pd.isna(row["Phone"]) else str(row["Phone"])),
-        "reason": ", ".join(reason),
-    }
-)
+            {
+                "row": int(row["source_row"]),
+                "name": "" if pd.isna(row["Name"]) else str(row["Name"]),
+                "phone": re.sub(r"\D", "", "" if pd.isna(row["Phone"]) else str(row["Phone"])),
+                "reason": ", ".join(reason),
+            }
+        )
 
     valid = working[~invalid_mask].copy()
 
