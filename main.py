@@ -818,7 +818,7 @@ async def sync_preview(
     if property_key not in PROPERTY_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown property config: {property_key}")
 
-    raw_df = load_table_from_upload(pms_file)
+        raw_df = load_table_from_upload(pms_file)
     current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
 
     inferred_config = PROPERTY_CONFIGS[property_key].copy()
@@ -826,7 +826,13 @@ async def sync_preview(
     if current_df is not None:
         inferred_config.update(infer_apartment_format_from_textbox(current_df))
 
-    cleaned_df, invalid_rows = normalize_pms_export(raw_df, inferred_config)
+    unit_mapping = build_unit_mapping_from_textbox(current_df) if current_df is not None else {}
+
+    cleaned_df, invalid_rows = normalize_pms_export(
+        raw_df,
+        inferred_config,
+        unit_mapping=unit_mapping,
+    )
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
 
     delta_sync_df = build_delta_sync_file(cleaned_df, old_df)
@@ -870,16 +876,16 @@ async def general_sync_preview(
     if property_key not in PROPERTY_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown property config: {property_key}")
 
-  raw_df = load_table_from_upload(pms_file)
-current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
+    raw_df = load_table_from_upload(pms_file)
+    current_df = load_table_from_upload(current_contacts_file) if current_contacts_file else None
 
-unit_mapping = build_unit_mapping_from_textbox(current_df) if current_df is not None else {}
+    unit_mapping = build_unit_mapping_from_textbox(current_df) if current_df is not None else {}
 
-cleaned_df, invalid_rows = normalize_pms_export(
-    raw_df,
-    PROPERTY_CONFIGS[property_key],
-    unit_mapping=unit_mapping,
-)
+    cleaned_df, invalid_rows = normalize_pms_export(
+        raw_df,
+        PROPERTY_CONFIGS[property_key],
+        unit_mapping=unit_mapping,
+    )
     old_df = normalize_current_contacts(current_df) if current_df is not None else None
 
     full_sync_df = build_general_full_sync_file(cleaned_df, old_df)
