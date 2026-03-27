@@ -467,6 +467,61 @@ def get_candidate_mapping_keys(unit_value: str) -> List[str]:
             keys.append(prefix)
 
     return keys
+    
+def find_neighbor_mapping(unit_value: str, unit_mapping: Dict[str, dict]) -> Optional[dict]:
+    unit_value = (unit_value or "").strip()
+    if not unit_value.isdigit():
+        return None
+
+    target = int(unit_value)
+    neighbor_matches: List[Tuple[int, dict]] = []
+
+    for key, value in unit_mapping.items():
+        key_str = str(key).strip()
+        if not key_str.isdigit():
+            continue
+
+        distance = abs(int(key_str) - target)
+
+        if distance == 0:
+            continue
+
+        # Only consider nearby units
+        if distance <= 10:
+            neighbor_matches.append((distance, value))
+
+    if not neighbor_matches:
+        return None
+
+    # Closest neighbors first
+    neighbor_matches.sort(key=lambda x: x[0])
+
+    # Use up to 5 closest neighbors
+    closest = [entry for _, entry in neighbor_matches[:5]]
+
+    group_counts: Dict[str, int] = {}
+    contact2_counts: Dict[str, int] = {}
+
+    for entry in closest:
+        groups = str(entry.get("groups", "")).strip()
+        contact2 = str(entry.get("contact2", "")).strip()
+
+        if groups:
+            group_counts[groups] = group_counts.get(groups, 0) + 1
+        if contact2:
+            contact2_counts[contact2] = contact2_counts.get(contact2, 0) + 1
+
+    if not group_counts and not contact2_counts:
+        return None
+
+    best_groups = max(group_counts, key=group_counts.get) if group_counts else ""
+    best_contact2 = max(contact2_counts, key=contact2_counts.get) if contact2_counts else ""
+
+    return {
+        "groups": best_groups,
+        "contact2": best_contact2,
+    }
+
 
 def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
     normalized = normalize_current_contacts(current_df)
