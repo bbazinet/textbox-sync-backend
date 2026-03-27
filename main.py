@@ -273,6 +273,11 @@ def normalize_pms_export(
             if key in unit_mapping:
                 return unit_mapping[key]
 
+        # 3. Neighboring numeric units third
+        neighbor_entry = find_neighbor_mapping(unit_value, unit_mapping)
+        if neighbor_entry:
+            return neighbor_entry
+
         return None
 
     def resolve_contact2(row) -> str:
