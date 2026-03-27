@@ -280,16 +280,26 @@ def normalize_pms_export(
 
         return None
 
-    def resolve_contact2(row) -> str:
+        def resolve_contact2(row) -> str:
         mapped_entry = resolve_mapped_entry(row["Unit"])
 
         if mapped_entry:
             mapped_contact2 = str(mapped_entry.get("contact2", "")).strip()
+            mapped_groups = str(mapped_entry.get("groups", "")).strip().lower()
+
             if mapped_contact2:
                 if mapped_contact2.lower().startswith("apt "):
                     return f"apt {row['Unit']}"
                 if mapped_contact2.lower().startswith("th "):
                     return f"TH {row['Unit']}"
+
+            # Fallback: infer style from mapped groups / unit shape
+            if "thbldg" in mapped_groups:
+                return f"TH {row['Unit']}"
+            if "-" in str(row["Unit"]):
+                return f"apt {row['Unit']}"
+
+            if mapped_contact2:
                 return mapped_contact2
 
         return property_config["contact2_template"].format(
