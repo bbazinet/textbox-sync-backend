@@ -501,42 +501,42 @@ def find_neighbor_mapping(unit_value: str, unit_mapping: Dict[str, dict]) -> Opt
     # Closest neighbors first
     neighbor_matches.sort(key=lambda x: x[0])
 
-   # Use up to 5 closest neighbors
-closest = [entry for _, entry in neighbor_matches[:5]]
+    # Use up to 5 closest neighbors
+    closest = [entry for _, entry in neighbor_matches[:5]]
 
-group_counts: Dict[str, int] = {}
-contact2_counts: Dict[str, int] = {}
+    group_counts: Dict[str, int] = {}
+    contact2_counts: Dict[str, int] = {}
 
-for entry in closest:
-    groups = str(entry.get("groups", "")).strip()
-    contact2 = str(entry.get("contact2", "")).strip()
+    for entry in closest:
+        groups = str(entry.get("groups", "")).strip()
+        contact2 = str(entry.get("contact2", "")).strip()
 
-    if groups:
-        group_counts[groups] = group_counts.get(groups, 0) + 1
-    if contact2:
-        contact2_counts[contact2] = contact2_counts.get(contact2, 0) + 1
+        if groups:
+            group_counts[groups] = group_counts.get(groups, 0) + 1
+        if contact2:
+            contact2_counts[contact2] = contact2_counts.get(contact2, 0) + 1
 
-# 🚨 Require strong consensus
-if not group_counts:
-    return None
+    # 🚨 Require strong consensus
+    if not group_counts:
+        return None
 
-best_groups = max(group_counts, key=group_counts.get)
-best_count = group_counts[best_groups]
+    best_groups = max(group_counts, key=group_counts.get)
+    best_count = group_counts[best_groups]
 
-# Require:
-# - at least 2 matches
-# - AND majority of neighbors
-if best_count < 2 or best_count <= len(closest) / 2:
-    return None
+    # Require:
+    # - at least 2 matches
+    # - AND majority of neighbors
+    if best_count < 2 or best_count <= len(closest) / 2:
+        return None
 
-best_contact2 = ""
-if contact2_counts:
-    best_contact2 = max(contact2_counts, key=contact2_counts.get)
+    best_contact2 = ""
+    if contact2_counts:
+        best_contact2 = max(contact2_counts, key=contact2_counts.get)
 
-return {
-    "groups": best_groups,
-    "contact2": best_contact2,
-}
+    return {
+        "groups": best_groups,
+        "contact2": best_contact2,
+    }
 
 
 def infer_apartment_format_from_textbox(current_df: pd.DataFrame) -> dict:
