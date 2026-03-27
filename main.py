@@ -407,7 +407,7 @@ def build_unit_mapping_from_textbox(current_df: pd.DataFrame) -> Dict[str, dict]
         if not contact2 or not groups:
             continue
 
-        unit = extract_unit_from_contact2(contact2)
+        unit = extract_unit_from_contact2(contact2).strip()
         if not unit:
             continue
 
