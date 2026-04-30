@@ -280,37 +280,37 @@ def normalize_pms_export(
 
         return None
 
-def resolve_contact2(row) -> str:
-    mapped_entry = resolve_mapped_entry(row["Unit"])
-    unit_str = str(row["Unit"]).strip()
+    def resolve_contact2(row) -> str:
+        mapped_entry = resolve_mapped_entry(row["Unit"])
+        unit_str = str(row["Unit"]).strip()
 
-    if not unit_str:
-        return ""
+        if not unit_str:
+            return ""
 
-    if mapped_entry:
-        mapped_contact2 = str(mapped_entry.get("contact2", "")).strip()
-        mapped_groups = str(mapped_entry.get("groups", "")).strip().lower()
+        if mapped_entry:
+            mapped_contact2 = str(mapped_entry.get("contact2", "")).strip()
+            mapped_groups = str(mapped_entry.get("groups", "")).strip().lower()
 
-        # Keep TH if clearly TH
-        if mapped_contact2.lower().startswith("th ") or "thbldg" in mapped_groups:
-            return f"TH {unit_str}"
+            # Keep TH if clearly TH
+            if mapped_contact2.lower().startswith("th ") or "thbldg" in mapped_groups:
+                return f"TH {unit_str}"
 
-        # Fix missing apt for apartment-style units
-        if mapped_contact2.lower().startswith("apt ") or "-" in unit_str:
+            # Fix missing apt for apartment-style units
+            if mapped_contact2.lower().startswith("apt ") or "-" in unit_str:
+                return f"apt {unit_str}"
+
+            if mapped_contact2:
+                return mapped_contact2
+
+        # Final fallback
+        if "-" in unit_str:
             return f"apt {unit_str}"
 
-        if mapped_contact2:
-            return mapped_contact2
-
-    # Final fallback
-    if "-" in unit_str:
-        return f"apt {unit_str}"
-
-    return property_config["contact2_template"].format(
-        unit=unit_str,
-        building=row["Building"],
-        floor=row["Floor"],
-    )
+        return property_config["contact2_template"].format(
+            unit=unit_str,
+            building=row["Building"],
+            floor=row["Floor"],
+        )
 
     def resolve_groups(row) -> str:
         mapped_entry = resolve_mapped_entry(row["Unit"])
