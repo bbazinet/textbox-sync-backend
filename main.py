@@ -329,8 +329,23 @@ def normalize_pms_export(
     working["Contact2"] = working.apply(resolve_contact2, axis=1)
     working["Groups"] = working.apply(resolve_groups, axis=1)
 
+    def ensure_all_group(groups: object) -> str:
+        value = "" if pd.isna(groups) else str(groups).strip()
+        if not value:
+            return ""
+
+        parts = [p for p in value.split("#") if p]
+        tags = [f"#{p}" for p in parts]
+
+        if "#all" not in tags:
+            tags.insert(0, "#all")
+
+        return "".join(tags)
+
+    working["Groups"] = working["Groups"].apply(ensure_all_group)
+
     invalid_mask = (
-        (working["Phone"] == "")
+         (working["Phone"] == "")
         | (working["Contact1"].str.strip() == "")
         | (working["Contact2"].str.strip() == "")
         | (working["Groups"].str.strip() == "")
