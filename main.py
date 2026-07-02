@@ -283,36 +283,35 @@ def normalize_pms_export(
     cleaned = detect_and_clean_pms_export(raw_df)
 
     name_col = find_column(cleaned, ["Name", "Tenant Name", "Resident Name", "Contact Name"])
-first_name_col = find_column(cleaned, ["First Name", "First"])
-last_name_col = find_column(cleaned, ["Last Name", "Last"])
+    first_name_col = find_column(cleaned, ["First Name", "First"])
+    last_name_col = find_column(cleaned, ["Last Name", "Last"])
+    unit_col = find_column(cleaned, ["Bldg/Unit", "Unit", "Apartment", "Apt", "Apt/Unit", "Unit Number"])
+    phone_col = find_column(cleaned, ["Phone", "Phone Number", "Phone Number: Default", "Mobile", "Cell", "Primary Phone"])
 
-unit_col = find_column(cleaned, ["Bldg/Unit", "Unit", "Apartment", "Apt", "Apt/Unit", "Unit Number"])
-phone_col = find_column(cleaned, ["Phone", "Phone Number", "Phone Number: Default", "Mobile", "Cell", "Primary Phone"])
+    missing = []
+    if not name_col and not (first_name_col and last_name_col):
+        missing.append("Name / Tenant Name / First Name + Last Name")
+    if not unit_col:
+        missing.append("Bldg/Unit / Unit")
+    if not phone_col:
+        missing.append("Phone / Phone Number / Mobile")
 
-missing = []
-if not name_col and not (first_name_col and last_name_col):
-    missing.append("Name / Tenant Name / First Name + Last Name")
-if not unit_col:
-    missing.append("Bldg/Unit / Unit")
-if not phone_col:
-    missing.append("Phone / Phone Number / Mobile")
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
 
-if missing:
-    raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
+    working = pd.DataFrame()
 
-working = pd.DataFrame()
+    if name_col:
+        working["Name"] = cleaned[name_col]
+    else:
+        working["Name"] = (
+            cleaned[first_name_col].fillna("").astype(str).str.strip()
+            + " "
+            + cleaned[last_name_col].fillna("").astype(str).str.strip()
+        ).str.strip()
 
-if name_col:
-    working["Name"] = cleaned[name_col]
-else:
-    working["Name"] = (
-        cleaned[first_name_col].fillna("").astype(str).str.strip()
-        + " "
-        + cleaned[last_name_col].fillna("").astype(str).str.strip()
-    ).str.strip()
-
-working["Bldg/Unit"] = cleaned[unit_col]
-working["Phone"] = cleaned[phone_col]
+    working["Bldg/Unit"] = cleaned[unit_col]
+    working["Phone"] = cleaned[phone_col]
     working["source_row"] = range(1, len(working) + 1)
     working["Contact1"] = working["Name"].apply(title_case_name)
     working["Phone"] = working["Phone"].apply(clean_phone)
@@ -326,18 +325,15 @@ working["Phone"] = cleaned[phone_col]
     def resolve_mapped_entry(unit_value: str) -> Optional[dict]:
         keys = get_candidate_mapping_keys(unit_value)
 
-        # 1. Exact unit match first
         if keys:
             exact_key = keys[0]
             if exact_key in unit_mapping:
                 return unit_mapping[exact_key]
 
-        # 2. Prefix match second
         for key in keys[1:]:
             if key in unit_mapping:
                 return unit_mapping[key]
 
-        # 3. Neighboring numeric units third
         neighbor_entry = find_neighbor_mapping(unit_value, unit_mapping)
         if neighbor_entry:
             return neighbor_entry
@@ -355,18 +351,15 @@ working["Phone"] = cleaned[phone_col]
             mapped_contact2 = str(mapped_entry.get("contact2", "")).strip()
             mapped_groups = str(mapped_entry.get("groups", "")).strip().lower()
 
-            # Keep TH if clearly TH
             if mapped_contact2.lower().startswith("th ") or "thbldg" in mapped_groups:
                 return f"TH {unit_str}"
 
-            # Fix missing apt for apartment-style units
             if mapped_contact2.lower().startswith("apt ") or "-" in unit_str:
                 return f"apt {unit_str}"
 
             if mapped_contact2:
                 return mapped_contact2
 
-        # Final fallback
         if "-" in unit_str:
             return f"apt {unit_str}"
 
@@ -409,7 +402,7 @@ working["Phone"] = cleaned[phone_col]
     working["Groups"] = working["Groups"].apply(ensure_all_group)
 
     invalid_mask = (
-         (working["Phone"] == "")
+        (working["Phone"] == "")
         | (working["Contact1"].str.strip() == "")
         | (working["Contact2"].str.strip() == "")
         | (working["Groups"].str.strip() == "")
