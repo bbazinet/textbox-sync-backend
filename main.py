@@ -265,6 +265,15 @@ def merge_household_names(names: List[str]) -> str:
 
     return " & ".join(ordered_unique)
 
+def find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    normalized = {str(c).strip().lower(): c for c in df.columns}
+
+    for candidate in candidates:
+        key = candidate.strip().lower()
+        if key in normalized:
+            return normalized[key]
+
+    return None
 
 def normalize_pms_export(
     raw_df: pd.DataFrame,
@@ -273,12 +282,37 @@ def normalize_pms_export(
 ) -> Tuple[pd.DataFrame, List[dict]]:
     cleaned = detect_and_clean_pms_export(raw_df)
 
-    required_columns = ["Name", "Bldg/Unit", "Phone"]
-    missing = [col for col in required_columns if col not in cleaned.columns]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
+    name_col = find_column(cleaned, ["Name", "Tenant Name", "Resident Name", "Contact Name"])
+first_name_col = find_column(cleaned, ["First Name", "First"])
+last_name_col = find_column(cleaned, ["Last Name", "Last"])
 
-    working = cleaned[["Name", "Bldg/Unit", "Phone"]].copy()
+unit_col = find_column(cleaned, ["Bldg/Unit", "Unit", "Apartment", "Apt", "Apt/Unit", "Unit Number"])
+phone_col = find_column(cleaned, ["Phone", "Phone Number", "Phone Number: Default", "Mobile", "Cell", "Primary Phone"])
+
+missing = []
+if not name_col and not (first_name_col and last_name_col):
+    missing.append("Name / Tenant Name / First Name + Last Name")
+if not unit_col:
+    missing.append("Bldg/Unit / Unit")
+if not phone_col:
+    missing.append("Phone / Phone Number / Mobile")
+
+if missing:
+    raise HTTPException(status_code=400, detail=f"Missing required PMS columns: {missing}")
+
+working = pd.DataFrame()
+
+if name_col:
+    working["Name"] = cleaned[name_col]
+else:
+    working["Name"] = (
+        cleaned[first_name_col].fillna("").astype(str).str.strip()
+        + " "
+        + cleaned[last_name_col].fillna("").astype(str).str.strip()
+    ).str.strip()
+
+working["Bldg/Unit"] = cleaned[unit_col]
+working["Phone"] = cleaned[phone_col]
     working["source_row"] = range(1, len(working) + 1)
     working["Contact1"] = working["Name"].apply(title_case_name)
     working["Phone"] = working["Phone"].apply(clean_phone)
