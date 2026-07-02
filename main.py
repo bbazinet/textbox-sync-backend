@@ -73,11 +73,8 @@ def load_table_from_upload(upload: UploadFile) -> pd.DataFrame:
 
 
 def detect_and_clean_pms_export(df: pd.DataFrame) -> pd.DataFrame:
-    working = df.copy()
-    header_row = None
-
-    for i in range(min(len(working), 30)):
-        row_values = [str(v).strip().lower() for v in working.iloc[i].tolist()]
+    def row_has_required_headers(values: List[str]) -> bool:
+        row_values = [str(v).strip().lower() for v in values]
 
         has_name = (
             "name" in row_values
@@ -106,7 +103,18 @@ def detect_and_clean_pms_export(df: pd.DataFrame) -> pd.DataFrame:
             ]
         )
 
-        if has_name and has_unit and has_phone:
+        return has_name and has_unit and has_phone
+
+    # First check existing dataframe headers
+    if row_has_required_headers(list(df.columns)):
+        return df.copy()
+
+    # Otherwise scan first rows for embedded header row
+    working = df.copy()
+    header_row = None
+
+    for i in range(min(len(working), 30)):
+        if row_has_required_headers(working.iloc[i].tolist()):
             header_row = i
             break
 
