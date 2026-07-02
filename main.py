@@ -241,7 +241,7 @@ def normalize_pms_export(
     property_config: dict,
     unit_mapping: Optional[Dict[str, dict]] = None,
 ) -> Tuple[pd.DataFrame, List[dict]]:
-    cleaned = detect_and_clean_onesite(raw_df)
+    cleaned = detect_and_clean_pms_export(raw_df)
 
     required_columns = ["Name", "Bldg/Unit", "Phone"]
     missing = [col for col in required_columns if col not in cleaned.columns]
