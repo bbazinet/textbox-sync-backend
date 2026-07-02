@@ -72,24 +72,54 @@ def load_table_from_upload(upload: UploadFile) -> pd.DataFrame:
     raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
 
-def detect_and_clean_onesite(df: pd.DataFrame) -> pd.DataFrame:
+def detect_and_clean_pms_export(df: pd.DataFrame) -> pd.DataFrame:
     working = df.copy()
     header_row = None
 
-    for i in range(min(len(working), 25)):
+    for i in range(min(len(working), 30)):
         row_values = [str(v).strip().lower() for v in working.iloc[i].tolist()]
-        if "name" in row_values and any("bldg/unit" == v for v in row_values):
+
+        has_name = (
+            "name" in row_values
+            or "tenant name" in row_values
+            or "resident name" in row_values
+            or ("first name" in row_values and "last name" in row_values)
+        )
+
+        has_unit = (
+            "bldg/unit" in row_values
+            or "unit" in row_values
+            or "apartment" in row_values
+            or "apt" in row_values
+            or "unit number" in row_values
+        )
+
+        has_phone = any(
+            v in row_values
+            for v in [
+                "phone",
+                "phone number",
+                "phone number: default",
+                "mobile",
+                "cell",
+                "primary phone",
+            ]
+        )
+
+        if has_name and has_unit and has_phone:
             header_row = i
             break
 
     if header_row is None:
-        raise HTTPException(status_code=400, detail="Could not detect OneSite header row.")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not detect a header row with name, unit, and phone columns.",
+        )
 
     working = working.iloc[header_row:].copy()
     working.columns = working.iloc[0]
     working = working.iloc[1:].reset_index(drop=True)
     return working
-
 
 def clean_phone(value: object) -> str:
     digits = re.sub(r"\D", "", "" if pd.isna(value) else str(value))
